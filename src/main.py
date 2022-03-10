@@ -2,14 +2,13 @@ import os
 import sys
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import scipy.signal
-from numpy import arange
 from pyxdf import pyxdf
 from scipy.signal import butter, lfilter, sosfilt
-from scipy.fft import fft
-import tkinter
-import mne
 from sklearn.metrics import mean_squared_error
+import seaborn as sns
+import tkinter
 
 
 def get_path():
@@ -20,16 +19,19 @@ def get_path():
         path_selected = filedialog.askopenfilename(initialdir=os.getcwd(), title="Select a File",
                                                    filetypes=(("xdf files", "*.xdf*"),))
     else:
-        path_selected = input(
-            "Not able to use tkinter to select the file. Insert here the file path and press ENTER:\n")
+        path_selected = input("Not able to use tkinter to select the file. Insert here the file path and press ENTER:\n")
 
     return path_selected
 
 
-def getfilename(path):
+def getsubjectname(path):
     base = os.path.basename(path)
     file = os.path.splitext(base)[0]
-    return file
+
+    x = file.split('-', 1)[1]
+    x = x.split('_ses', 1)[0]
+
+    return x
 
 
 def load_xdf(path):
@@ -51,15 +53,10 @@ def load_xdf(path):
     return orn_signal, eeg_signal, marker_signal, eeg_frequency
 
 
-def butter_bandpass(lowcut, highcut, fs, order=8):
+def butter_bandpass_filter(data, lowcut, highcut, fs, order=8):
     low = lowcut / fs
     high = highcut / fs
     sos = butter(order, [low, high], analog=False, btype='band', output='sos')
-    return sos
-
-
-def butter_bandpass_filter(data, lowcut, highcut, fs, order=8):
-    sos = butter_bandpass(lowcut, highcut, fs, order=order)
     y = sosfilt(sos, data)
 
     b, a = scipy.signal.iirnotch(50, Q=150, fs=fs)
@@ -76,7 +73,7 @@ if __name__ == '__main__':
 
     path = get_path()
     # path = 'C:/Users/giuli/Documents/Università/Traineeship/device-evaluation/data/sub-test_without_gel/ses-S001/eeg/sub-test_without_gel_ses-S001_task-Default_run-001_eeg.xdf'
-    filename = getfilename(path)
+    filename = getsubjectname(path)
     [_, eeg, _, eeg_freq] = load_xdf(path)
 
     eeg = np.asmatrix(eeg)
@@ -95,11 +92,11 @@ if __name__ == '__main__':
 
         x = np.arange(len(eeg_filt)) / eeg_freq
         axs[channel, 0].set_xlabel('Time (s)', fontsize=10)
-        axs[channel, 0].set_ylabel('Amplitude (uV)', fontsize=10)
+        axs[channel, 0].set_ylabel('Channel ' + str(channel) + '\n\n\nAmplitude (uV)'.format(channel), fontsize=10)
         axs[channel, 0].yaxis.set_label_coords(-0.2, 0.5)
         axs[channel, 0].plot(x, eeg_filt)
 
-        get_rms_smoothed(eeg_filt)
+        # get_rms_smoothed(eeg_filt)
 
         x = np.arange(500) / eeg_freq
         axs[channel, 1].set_xlabel('Time (s)', fontsize=10)
@@ -113,13 +110,16 @@ if __name__ == '__main__':
         axs[channel, 2].yaxis.set_label_coords(-0.2, 0.5)
         axs[channel, 2].hist(eeg_filt, bins, alpha=0.5, histtype='bar', ec='black')
 
-        # axs[channel, 3].plot(frq, abs(Y), 'r')  # plotting the spectrum
         axs[channel, 3].magnitude_spectrum(eeg_filt, Fs=eeg_freq)
         axs[channel, 3].set_xlabel('Frequency (Hz)', fontsize=10)
         axs[channel, 3].set_ylabel('Amplitude (uV)', fontsize=10)
-        axs[channel, 3].yaxis.set_label_coords(-0.2, 0.5)
+        axs[channel, 3].yaxis.set_label_coords(-0.1, 0.5)
         axs[channel, 3].set_xlim(-2, 42)
 
     fig.suptitle(filename, fontsize=30)
     plt.savefig('images/{}.jpg'.format(filename))
     fig.show()
+
+    # df = pd.DataFrame(eeg, columns=np.arange(8))
+    # g = sns.pairplot(df, diag_kind="kde")
+    # plt.show()
