@@ -1,10 +1,34 @@
+import os
+import sys
 import matplotlib.pyplot as plt
 import numpy as np
+from numpy import arange
 from pyxdf import pyxdf
+from scipy.signal import butter, lfilter
+from scipy.fft import fft
+import tkinter
+
+
+def get_path():
+    name = 'tkinter'
+
+    if name in sys.modules:
+        from tkinter import filedialog
+        path_selected = filedialog.askopenfilename(initialdir=os.getcwd(), title="Select a File",
+                                                   filetypes=(("xdf files", "*.xdf*"),))
+    else:
+        path_selected = input("Not able to use tkinter to select the file. Insert here the file path and press ENTER:\n")
+
+    return path_selected
+
+
+def getfilename(path):
+    base = os.path.basename(path)
+    file = os.path.splitext(base)[0]
+    return file
 
 
 def load_xdf(path):
-
     dat = pyxdf.load_xdf(path)
 
     orn_signal, eeg_signal, marker_signal, eeg_frequency = None, None, None, None
@@ -23,39 +47,75 @@ def load_xdf(path):
     return orn_signal, eeg_signal, marker_signal, eeg_frequency
 
 
+def butter_bandpass(lowcut, highcut, fs, order=5):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    # noinspection PyTupleAssignmentBalance
+    b, a = butter(order, (low, high), btype='band')
+    return b, a
+
+
+def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
+    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+    y = lfilter(b, a, data)
+    return y
+
+
 if __name__ == '__main__':
 
-    [_, eeg, _, eeg_freq] = load_xdf(
-        'C:/Users/Giulia Pezzutti/Documents/project-selina/data/sub-test_with_water/ses-S001/eeg'
-        '/sub-test_with_water_ses-S001_task-Default_run-001_eeg.xdf')
+    path = get_path()
+    filename = getfilename(path)
+    [_, eeg, _, eeg_freq] = load_xdf(path)
 
     eeg = np.asmatrix(eeg)
     interval_removal = 60  # in seconds
-    eeg = eeg[interval_removal*eeg_freq:-interval_removal*eeg_freq]
+    eeg = eeg[interval_removal * eeg_freq:-interval_removal * eeg_freq]
 
     eeg = eeg - np.mean(eeg, axis=0)
-    plt.plot(eeg[:, 4])
 
-    scale_factor = 1
-    xmin, xmax = plt.xlim()
-    ymin, ymax = plt.ylim()
-    plt.xlim(xmin * scale_factor, xmax * scale_factor)
-    plt.ylim(ymin * scale_factor, ymax * scale_factor)
+    fig, axs = plt.subplots(eeg.shape[1], 4, figsize=(25, 16), gridspec_kw={'width_ratios': [3, 3, 3, 3]})
+    fig.subplots_adjust(wspace=0.5)
 
-    plt.show()
+    for channel in range(eeg.shape[1]):
+        eeg_current = eeg[:, channel]
 
-    print(np.min(eeg))
-    print(np.max(eeg))
+        eeg_filt = butter_bandpass_filter(eeg_current, lowcut=0.1, highcut=40, fs=eeg_freq, order=8)[:, 0]
 
-    bins = np.linspace(np.min(eeg[:, 4]), np.max(eeg[:, 4]), 100)
-    plt.title('Relative Amplitude', fontsize=30)
-    plt.xlabel('Random Histogram')
-    plt.ylabel('Frequency', fontsize=30)
-    plt.hist(eeg[:, 4], bins, alpha=0.5, histtype='bar', ec='black')
+        x = np.arange(len(eeg_filt)) / eeg_freq
+        axs[channel, 0].set_xlabel('Time (s)', fontsize=10)
+        axs[channel, 0].set_ylabel('Amplitude (uV)', fontsize=10)
+        axs[channel, 0].yaxis.set_label_coords(-0.2, 0.5)
+        axs[channel, 0].plot(x, eeg_filt)
 
-    plt.legend(loc='upper right', fontsize=30)
-    plt.xticks(fontsize=20)
-    plt.yticks(fontsize=20)
-    plt.show()
+        x = np.arange(500) / eeg_freq
+        axs[channel, 1].set_xlabel('Time (s)', fontsize=10)
+        axs[channel, 1].set_ylabel('Amplitude (uV)', fontsize=10)
+        axs[channel, 1].yaxis.set_label_coords(-0.2, 0.5)
+        axs[channel, 1].plot(x, eeg_filt[0:500])
 
+        bins = np.linspace(np.min(eeg_filt), np.max(eeg_filt), 100)
+        axs[channel, 2].set_xlabel('Amplitude', fontsize=10)
+        axs[channel, 2].set_ylabel('Frequency', fontsize=10)
+        axs[channel, 2].yaxis.set_label_coords(-0.2, 0.5)
+        axs[channel, 2].hist(eeg_filt, bins, alpha=0.5, histtype='bar', ec='black')
 
+        n = len(eeg_filt)  # length of the signal
+        k = arange(n)
+        T = n / eeg_freq
+        frq = k / T  # two sides frequency range
+        frq = frq[range(int(n / 2))]  # one side frequency range
+
+        Y = fft(eeg_filt) / n  # fft computing and normalization
+        Y = Y[range(int(n / 2))]
+
+        # axs[channel, 3].plot(frq, abs(Y), 'r')  # plotting the spectrum
+        axs[channel, 3].magnitude_spectrum(eeg_filt, Fs=eeg_freq)
+        axs[channel, 3].set_xlabel('Freq (Hz)', fontsize=10)
+        axs[channel, 3].set_ylabel('Amplitude (uV)', fontsize=10)
+        axs[channel, 3].yaxis.set_label_coords(-0.2, 0.5)
+        axs[channel, 3].set_xlim(-2, 42)
+
+    fig.suptitle(filename, fontsize=30)
+    plt.savefig('images/{}.jpg'.format(filename))
+    fig.show()
