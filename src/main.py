@@ -92,7 +92,7 @@ if __name__ == '__main__':
 
         x = np.arange(len(eeg_filt)) / eeg_freq
         axs[channel, 0].set_xlabel('Time (s)', fontsize=10)
-        axs[channel, 0].set_ylabel('Channel ' + str(channel) + '\n\n\nAmplitude (uV)'.format(channel), fontsize=10)
+        axs[channel, 0].set_ylabel('Channel ' + str(channel+1) + '\n\n\nAmplitude (uV)'.format(channel), fontsize=10)
         axs[channel, 0].yaxis.set_label_coords(-0.2, 0.5)
         axs[channel, 0].plot(x, eeg_filt)
 
